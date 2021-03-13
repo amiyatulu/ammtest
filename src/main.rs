@@ -9,7 +9,7 @@ fn main() {
     #[derive(Default)]
     pub struct BananaSwap {
         pub berries_db: u128,
-        pub near_balance: u128,
+        pub contract_account_balance: u128,
     }
 
     impl BananaSwap {
@@ -20,7 +20,7 @@ fn main() {
         }
 
         pub fn get_buy_price(&self, berries: u128) -> u128 {
-            return self.get_buy_price_internal(berries, self.near_balance);
+            return self.get_buy_price_internal(berries, self.contract_account_balance);
         }
 
         fn get_buy_price_internal(&self, mut berries: u128, near_balance: u128) -> u128 {
@@ -50,7 +50,7 @@ fn main() {
         }
 
         pub fn buy(&mut self, berries: u128, attached_deposit_r: u128) {
-            let nearprice = self.get_buy_price_internal(berries, self.near_balance - attached_deposit_r);
+            let nearprice = self.get_buy_price_internal(berries, self.contract_account_balance - attached_deposit_r);
             self.berries_db = self.berries_db - berries;
 
             // transfer the left amount [attached_deposit_r - nearprice] to predecessor
@@ -65,14 +65,27 @@ fn main() {
             //     NO_DEPOSIT,
             //     env::prepaid_gas() - GAS_FOR_SWAP,
             // );
+        }
 
-
+        pub fn get_sell_price(&self, near_amount: u128) -> u128  {
+            let current_near_amount = (self.contract_account_balance - MIN_BALANCE) as f64 / MIN_FRACTION as f64;
+            let current_berries = self.berries_db as f64 / MIN_FRACTION as f64;
+            let near_amount_float = near_amount as f64 / MIN_FRACTION as f64;
+            let near_amount_int = near_amount_float as u128;
+            let current_near_amount_int = current_near_amount as u128;
+            assert!(near_amount_int > 0, "cannot exchange less than {} yoctoNear", MIN_FRACTION);
+            assert!(near_amount_int < current_near_amount_int, "not enough near in pool");
+            let new_near = current_near_amount - near_amount_float;
+            let new_berries = current_berries *  current_near_amount / new_near;
+            let berries_price = new_berries - current_berries;
+            let min_fraction_float = MIN_FRACTION as f64;
+            return self.with_commission((berries_price * min_fraction_float) as u128) ;
         }
     }
 
     let mut contract = BananaSwap::default();
     contract.berries_db = 7000000000001000000000000;
-    contract.near_balance  = 5000000000001000000000000;
+    contract.contract_account_balance  = 5000000000001000000000000;
     let commission = contract.with_commission(50);
     let price = contract.get_buy_price(5000000000001000000000000);
     println!("{:?}", price);
